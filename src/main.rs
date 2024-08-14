@@ -1,7 +1,8 @@
-use std::{
-    fs, os,
-    path::{Path, PathBuf},
-};
+use std::path::{Path, PathBuf};
+
+use futures;
+use tokio::fs;
+use tokio_stream::StreamExt;
 
 use clap::Parser;
 
@@ -24,20 +25,35 @@ struct Args {
     destination_path: PathBuf,
 }
 
-fn main() -> Result<()> {
+#[tokio::main]
+async fn main() -> Result<()> {
     let args = Args::parse();
 
-    let source_path = fs::canonicalize(&args.source_path)?;
-    let destination_path = fs::canonicalize(&args.destination_path)?;
+    let source_path = fs::canonicalize(&args.source_path).await?;
+    let destination_path = fs::canonicalize(&args.destination_path).await?;
 
     check_source_path(&source_path)?;
     check_destination_path(&destination_path)?;
 
-    let items_to_replicate = get_source_path_items(&source_path)?;
+    let items_to_replicate = get_source_path_items(&source_path).await?;
 
-    items_to_replicate
-        .iter()
-        .try_for_each(|item| replicate_item(item, &source_path, &destination_path))?;
+    // TODO: avoid the cloning
+
+    let handles = items_to_replicate
+        .into_iter()
+        .fold(Vec::new(), |mut handles, item| {
+            let source_path = source_path.clone();
+            let destination_path = destination_path.clone();
+
+            handles.push(tokio::spawn(async move {
+                replicate_item(&item.clone(), &source_path, &destination_path)
+                    .await
+                    .unwrap();
+            }));
+            handles
+        });
+
+    futures::future::join_all(handles).await;
 
     Ok(())
 }
@@ -70,12 +86,17 @@ fn check_destination_path(destination_path: &Path) -> Result<()> {
     Ok(())
 }
 
-fn get_source_path_items(source_path: &PathBuf) -> Result<Vec<PathBuf>> {
+async fn get_source_path_items(source_path: &PathBuf) -> Result<Vec<PathBuf>> {
+    // TODO: avoid the cloning
     if !source_path.is_dir() {
         return Ok(vec![source_path.clone()]);
     }
 
-    Ok(fs::read_dir(source_path)?
+    let items = fs::read_dir(source_path).await?;
+
+    let item_stream = tokio_stream::wrappers::ReadDirStream::new(items);
+
+    Ok(item_stream
         .filter_map(|entry| {
             if let Ok(e) = entry {
                 Some(e.path())
@@ -83,24 +104,25 @@ fn get_source_path_items(source_path: &PathBuf) -> Result<Vec<PathBuf>> {
                 None
             }
         })
-        .collect())
+        .collect()
+        .await)
 }
 
-fn replicate_item(item: &Path, source_path: &Path, destination_path: &Path) -> Result<()> {
+async fn replicate_item(item: &Path, source_path: &Path, destination_path: &Path) -> Result<()> {
     let item_relative_path = item.strip_prefix(source_path)?;
     let item_destination_path = destination_path.join(item_relative_path);
 
-    create_symlink(item, &item_destination_path)?;
+    create_symlink(item, &item_destination_path).await?;
 
     Ok(())
 }
 
-fn create_symlink(source: &Path, destination: &Path) -> Result<()> {
+async fn create_symlink(source: &Path, destination: &Path) -> Result<()> {
     if cfg!(windows) {
         return Err("Windows is not supported yet".into());
     }
 
-    os::unix::fs::symlink(source, destination)?;
+    fs::symlink(source, destination).await?;
 
     Ok(())
 }
