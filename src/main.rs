@@ -1,6 +1,7 @@
 use std::{
     fs, os,
     path::{Path, PathBuf},
+    time::Instant,
 };
 
 use clap::Parser;
@@ -25,6 +26,7 @@ struct Args {
 }
 
 fn main() -> Result<()> {
+    let start = Instant::now();
     let args = Args::parse();
 
     let source_path = fs::canonicalize(&args.source_path)?;
@@ -38,6 +40,10 @@ fn main() -> Result<()> {
     items_to_replicate
         .iter()
         .try_for_each(|item| replicate_item(item, &source_path, &destination_path))?;
+
+    let elapsed_time = start.elapsed();
+
+    println!("Took {:?}", elapsed_time);
 
     Ok(())
 }
