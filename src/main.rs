@@ -1,7 +1,7 @@
 use std::path::{Path, PathBuf};
 
 use futures;
-use tokio::fs;
+use tokio::{fs, time::Instant};
 use tokio_stream::StreamExt;
 
 use clap::Parser;
@@ -27,6 +27,7 @@ struct Args {
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    let start = Instant::now();
     let args = Args::parse();
 
     let source_path = fs::canonicalize(&args.source_path).await?;
@@ -55,6 +56,9 @@ async fn main() -> Result<()> {
 
     futures::future::join_all(handles).await;
 
+    let elapsed_time = start.elapsed();
+
+    println!("Took {:?}", elapsed_time);
     Ok(())
 }
 
