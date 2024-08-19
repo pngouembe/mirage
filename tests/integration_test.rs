@@ -5,8 +5,8 @@ use std::{env, fs};
 use tempdir::TempDir;
 
 #[test]
-fn test_replicate_folder() -> Result<()> {
-    let tmp_dir = TempDir::new("test_replicate_folder")?;
+fn test_replicate_folder_in_folder() -> Result<()> {
+    let tmp_dir = TempDir::new("test_replicate_folder_in_folder")?;
 
     let folder_to_replicate = env::current_dir()?.join("tests/resources/folder_to_replicate");
 
@@ -27,8 +27,8 @@ fn test_replicate_folder() -> Result<()> {
 }
 
 #[test]
-fn test_replicate_file() -> Result<()> {
-    let tmp_dir = TempDir::new("test_replicate_file")?;
+fn test_replicate_file_in_folder() -> Result<()> {
+    let tmp_dir = TempDir::new("test_replicate_file_in_folder")?;
 
     let file_to_replicate = env::current_dir()?.join("tests/resources/folder_to_replicate/file_a");
 
@@ -36,7 +36,20 @@ fn test_replicate_file() -> Result<()> {
 
     mirage::create_links(&file_to_replicate, tmp_dir.path(), true)?;
 
-    dbg!(&dst_file);
+    assert!(dst_file.exists());
+
+    assert_eq!(fs::read_link(dst_file)?, file_to_replicate);
+
+    Ok(())
+}
+
+#[test]
+fn test_replicate_file_with_new_name() -> Result<()> {
+    let tmp_dir = TempDir::new("test_replicate_file_with_new_name")?;
+    let file_to_replicate = env::current_dir()?.join("tests/resources/folder_to_replicate/file_a");
+    let dst_file = tmp_dir.path().join("replicated_file_a");
+
+    mirage::create_links(&file_to_replicate, &dst_file, true)?;
 
     assert!(dst_file.exists());
 

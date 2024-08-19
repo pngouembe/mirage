@@ -10,7 +10,11 @@ const MIRAGE_BACKUP_FILE_EXTENSION: &str = "mirage.backup";
 
 pub fn create_links(source_path: &Path, destination_path: &Path, backup: bool) -> Result<()> {
     let source_path = fs::canonicalize(source_path)?;
-    let destination_path = fs::canonicalize(destination_path)?;
+    let destination_path = if let Ok(path) = fs::canonicalize(destination_path) {
+        path
+    } else {
+        destination_path.to_owned()
+    };
 
     log::debug!(
         "Start replication: {} -> {}",
@@ -22,6 +26,7 @@ pub fn create_links(source_path: &Path, destination_path: &Path, backup: bool) -
     check_destination_path(&destination_path)?;
 
     match (source_path.is_dir(), destination_path.is_dir()) {
+        (false, false) => replicate_file_with_new_name(&source_path, &destination_path, backup),
         (false, true) => replicate_file_in_folder(&source_path, &destination_path, backup),
         (true, true) => replicate_folder(&source_path, &destination_path, backup),
         (_, _) => Err("The source path and/or destination path are not compatible.".into()),
@@ -37,17 +42,34 @@ fn check_source_path(source_path: &Path) -> Result<()> {
 }
 
 fn check_destination_path(destination_path: &Path) -> Result<()> {
-    if !destination_path.exists() {
-        return Err(format!("{} does not exist", destination_path.display()).into());
+    if destination_path.exists() {
+        return Ok(());
     }
 
-    if !destination_path.is_dir() {
-        return Err(format!(
-            "destination path is not a directory ({})",
-            destination_path.display()
-        )
-        .into());
+    if let Some(parent) = destination_path.parent() {
+        if parent.exists() {
+            return Ok(());
+        }
     }
+
+    Err("Incorrect destination path".into())
+}
+
+fn replicate_file_with_new_name(
+    source_path: &Path,
+    destination_path: &Path,
+    backup: bool,
+) -> Result<()> {
+    // TODO: extract in a function
+    if destination_path.exists() {
+        if backup {
+            backup_item(destination_path)?;
+        } else {
+            remove_item(destination_path)?;
+        }
+    }
+
+    create_symlink(source_path, destination_path)?;
 
     Ok(())
 }
