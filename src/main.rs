@@ -1,10 +1,8 @@
-use std::{
-    fs, os,
-    path::{Path, PathBuf},
-    time::Instant,
-};
+use std::{path::PathBuf, time::Instant};
 
-use clap::Parser;
+use mirage::create_links;
+
+use clap::{Parser, Subcommand};
 
 pub type Result<T> = core::result::Result<T, Error>;
 pub type Error = Box<dyn std::error::Error>; // For early dev.
@@ -16,97 +14,43 @@ pub type Error = Box<dyn std::error::Error>; // For early dev.
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
 struct Args {
-    /// Path to the folder containing the files and folders to replicate
-    #[arg(short, long = "src")]
-    source_path: PathBuf,
+    #[clap(subcommand)]
+    command: Command,
+}
 
-    /// Path to the folder were the files and folders will be replicated
-    #[arg(short, long = "dst")]
-    destination_path: PathBuf,
+#[derive(Debug, Subcommand)]
+enum Command {
+    Install {
+        /// Path to the folder containing the files and folders to replicate
+        #[clap(short, long = "src")]
+        source_path: PathBuf,
+
+        /// Path to the folder were the files and folders will be replicated
+        #[clap(short, long = "dst")]
+        destination_path: PathBuf,
+
+        /// Override existing files
+        #[clap(short, long)]
+        no_backup: bool,
+    },
 }
 
 fn main() -> Result<()> {
+    env_logger::init();
     let start = Instant::now();
     let args = Args::parse();
 
-    let source_path = fs::canonicalize(&args.source_path)?;
-    let destination_path = fs::canonicalize(&args.destination_path)?;
-
-    check_source_path(&source_path)?;
-    check_destination_path(&destination_path)?;
-
-    let items_to_replicate = get_source_path_items(&source_path)?;
-
-    items_to_replicate
-        .iter()
-        .try_for_each(|item| replicate_item(item, &source_path, &destination_path))?;
+    match args.command {
+        Command::Install {
+            source_path,
+            destination_path,
+            no_backup,
+        } => create_links(&source_path, &destination_path, !no_backup)?,
+    }
 
     let elapsed_time = start.elapsed();
 
-    println!("Took {:?}", elapsed_time);
-
-    Ok(())
-}
-
-fn check_source_path(source_path: &Path) -> Result<()> {
-    if !source_path.exists() {
-        return Err(format!("{} does not exist", source_path.display()).into());
-    }
-
-    if !source_path.is_dir() {
-        return Err(format!("source path is not a directory ({})", source_path.display()).into());
-    }
-
-    Ok(())
-}
-
-fn check_destination_path(destination_path: &Path) -> Result<()> {
-    if !destination_path.exists() {
-        return Err(format!("{} does not exist", destination_path.display()).into());
-    }
-
-    if !destination_path.is_dir() {
-        return Err(format!(
-            "destination path is not a directory ({})",
-            destination_path.display()
-        )
-        .into());
-    }
-
-    Ok(())
-}
-
-fn get_source_path_items(source_path: &PathBuf) -> Result<Vec<PathBuf>> {
-    if !source_path.is_dir() {
-        return Ok(vec![source_path.clone()]);
-    }
-
-    Ok(fs::read_dir(source_path)?
-        .filter_map(|entry| {
-            if let Ok(e) = entry {
-                Some(e.path())
-            } else {
-                None
-            }
-        })
-        .collect())
-}
-
-fn replicate_item(item: &Path, source_path: &Path, destination_path: &Path) -> Result<()> {
-    let item_relative_path = item.strip_prefix(source_path)?;
-    let item_destination_path = destination_path.join(item_relative_path);
-
-    create_symlink(item, &item_destination_path)?;
-
-    Ok(())
-}
-
-fn create_symlink(source: &Path, destination: &Path) -> Result<()> {
-    if cfg!(windows) {
-        return Err("Windows is not supported yet".into());
-    }
-
-    os::unix::fs::symlink(source, destination)?;
+    log::info!("Took {:?}", elapsed_time);
 
     Ok(())
 }
