@@ -1,16 +1,16 @@
 use std::{
     fs, os,
-    path::{Path, PathBuf},
+    path::{self, Path, PathBuf},
 };
 
 pub type Result<T> = core::result::Result<T, Error>;
 pub type Error = Box<dyn std::error::Error>; // For early dev.
 
-const MIRAGE_BACKUP_FILE_EXTENSION: &str = "mirage.backup";
+pub const MIRAGE_BACKUP_FILE_EXTENSION: &str = "mirage.backup";
 
 pub fn create_links(source_path: &Path, destination_path: &Path, backup: bool) -> Result<()> {
-    let source_path = fs::canonicalize(source_path)?;
-    let destination_path = if let Ok(path) = fs::canonicalize(destination_path) {
+    let source_path = path::absolute(source_path)?;
+    let destination_path = if let Ok(path) = path::absolute(destination_path) {
         path
     } else {
         destination_path.to_owned()
@@ -60,6 +60,11 @@ fn replicate_file_with_new_name(
     destination_path: &Path,
     backup: bool,
 ) -> Result<()> {
+    log::debug!(
+        "Replicating file with new name {} -> {}",
+        source_path.display(),
+        destination_path.display()
+    );
     // TODO: extract in a function
     if destination_path.exists() {
         if backup {
@@ -85,6 +90,12 @@ fn replicate_file_in_folder(
 
     let destination_path = destination_path.join(file_name);
 
+    log::debug!(
+        "Replicating file {} -> {}",
+        source_path.display(),
+        destination_path.display()
+    );
+
     // TODO: extract in a function
     if destination_path.exists() {
         if backup {
@@ -100,6 +111,12 @@ fn replicate_file_in_folder(
 }
 
 fn replicate_folder(source_path: &Path, destination_path: &Path, backup: bool) -> Result<()> {
+    log::debug!(
+        "Replicating folder {} -> {}",
+        source_path.display(),
+        destination_path.display()
+    );
+
     let items_to_replicate = get_source_path_items(source_path)?;
 
     items_to_replicate

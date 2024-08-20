@@ -1,6 +1,7 @@
 pub type Result<T> = core::result::Result<T, Error>;
 pub type Error = Box<dyn std::error::Error>; // For early dev.
 
+use mirage::MIRAGE_BACKUP_FILE_EXTENSION;
 use std::{env, fs};
 use tempdir::TempDir;
 
@@ -40,6 +41,35 @@ fn test_replicate_file_in_folder() -> Result<()> {
 
     assert_eq!(fs::read_link(dst_file)?, file_to_replicate);
 
+    let unwanted_source_file_backup =
+        file_to_replicate.with_extension(MIRAGE_BACKUP_FILE_EXTENSION);
+    assert!(!unwanted_source_file_backup.exists());
+
+    Ok(())
+}
+
+#[test]
+fn test_replicate_file_in_folder_with_backup() -> Result<()> {
+    let tmp_dir = TempDir::new("test_replicate_file_in_folder_with_backup")?;
+
+    let file_to_replicate = env::current_dir()?.join("tests/resources/folder_to_replicate/file_a");
+
+    let dst_file = tmp_dir.path().join("file_a");
+
+    mirage::create_links(&file_to_replicate, tmp_dir.path(), false)?;
+    mirage::create_links(&file_to_replicate, tmp_dir.path(), true)?;
+
+    assert!(dst_file.exists());
+
+    assert_eq!(fs::read_link(&dst_file)?, file_to_replicate);
+
+    let unwanted_source_file_backup =
+        file_to_replicate.with_extension(MIRAGE_BACKUP_FILE_EXTENSION);
+    assert!(!unwanted_source_file_backup.exists());
+
+    let wanted_dst_file_backup = dst_file.with_extension(MIRAGE_BACKUP_FILE_EXTENSION);
+    assert!(wanted_dst_file_backup.exists());
+
     Ok(())
 }
 
@@ -54,6 +84,10 @@ fn test_replicate_file_with_new_name() -> Result<()> {
     assert!(dst_file.exists());
 
     assert_eq!(fs::read_link(dst_file)?, file_to_replicate);
+
+    let unwanted_source_file_backup =
+        file_to_replicate.with_extension(MIRAGE_BACKUP_FILE_EXTENSION);
+    assert!(!unwanted_source_file_backup.exists());
 
     Ok(())
 }
