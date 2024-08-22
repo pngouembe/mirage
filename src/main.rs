@@ -1,11 +1,8 @@
 use std::{path::PathBuf, time::Instant};
 
-use mirage::create_links;
+use mirage::{create_links, sync, Result};
 
 use clap::{Parser, Subcommand};
-
-pub type Result<T> = core::result::Result<T, Error>;
-pub type Error = Box<dyn std::error::Error>; // For early dev.
 
 // TODO: Add commands (install, clean)
 // TODO: Add an override option to override existing files (backup or not)
@@ -33,6 +30,10 @@ enum Command {
         #[clap(short, long)]
         no_backup: bool,
     },
+    Sync {
+        #[clap(short, long = "config")]
+        config_file_path: PathBuf,
+    },
 }
 
 fn main() -> Result<()> {
@@ -46,6 +47,10 @@ fn main() -> Result<()> {
             destination_path,
             no_backup,
         } => create_links(&source_path, &destination_path, !no_backup)?,
+        Command::Sync { config_file_path } => {
+            let config = mirage::Config::try_from_file(&config_file_path)?;
+            sync(config)?
+        }
     }
 
     let elapsed_time = start.elapsed();
